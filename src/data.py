@@ -1,25 +1,28 @@
+"""data.py — Credit card default data for scorecard modeling (Aptivaa).
+
+Different from DefaultRisk (mortgage PD): uses revolving credit features
+with utilization rates, payment history, and revolving balances.
+"""
 from __future__ import annotations
 import numpy as np; import pandas as pd
-FEATURE_NAMES = ["pd_score","exposure_at_default","loss_given_default","credit_rating","industry_sector","loan_tenure_months","collateral_ratio","country_risk","maturity_years","restructured_flag"]
-CATEGORICAL_FEATURES = ["credit_rating","industry_sector","restructured_flag"]
-NUMERICAL_FEATURES = ["pd_score","exposure_at_default","loss_given_default","loan_tenure_months","collateral_ratio","country_risk","maturity_years"]
-def make_synthetic(n=10000,seed=42):
-    rng=np.random.default_rng(seed)
-    df=pd.DataFrame({
-        "pd_score": rng.beta(2,8,size=n).round(4),
-        "exposure_at_default": rng.lognormal(mean=12,sigma=0.8,size=n).clip(10000,10_000_000).astype(int),
-        "loss_given_default": rng.beta(4,5,size=n).round(3),
-        "credit_rating": rng.choice(["AAA","AA","A","BBB","BB","B","CCC","D"],size=n,p=[0.05,0.10,0.15,0.25,0.20,0.12,0.08,0.05]),
-        "industry_sector": rng.choice(["manufacturing","services","technology","energy","healthcare","finance"],size=n,p=[0.20,0.18,0.15,0.12,0.18,0.17]),
-        "loan_tenure_months": rng.uniform(12,360,size=n).astype(int),
-        "collateral_ratio": rng.uniform(0,2,size=n).round(2),
-        "country_risk": rng.uniform(1,10,size=n).round(2),
-        "maturity_years": rng.uniform(1,30,size=n).round(1),
-        "restructured_flag": rng.choice([0,1],size=n,p=[0.92,0.08]),
+
+
+def make_synthetic(n=5000, seed=42):
+    rng = np.random.default_rng(seed)
+    df = pd.DataFrame({
+        "utilization_rate": rng.beta(2, 5, n).round(3),
+        "age_months": rng.integers(6, 360, n),
+        "delinquency_days": rng.weibull(0.8, n).clip(0, 180).round(0),
+        "num_trades": rng.poisson(8, n).clip(1, 40),
+        "revolving_balance": rng.lognormal(9, 1, n).clip(0, 100000).round(0),
+        "payment_ratio": rng.beta(5, 2, n).round(3),
+        "inquiries_6m": rng.poisson(0.5, n).clip(0, 10),
     })
-    pd_s = df["pd_score"]; lgd = df["loss_given_default"]; coll = np.clip(df["collateral_ratio"],0,1)
-    country = df["country_risk"]/10; rest = df["restructured_flag"]; rating_map={"AAA":0,"AA":1,"A":2,"BBB":3,"BB":4,"B":5,"CCC":6,"D":7}
-    rating_num = df["credit_rating"].map(rating_map).values/7
-    log_odds = -2.0 + 3.0*pd_s + 0.5*lgd - 0.5*coll + 0.3*country + 0.5*rest + 0.4*rating_num + rng.normal(0,0.4,size=n)
-    prob = 1/(1+np.exp(-log_odds)); y=(prob>np.percentile(prob,80)).astype(np.float64)
-    return {"X":df,"y":y,"features":FEATURE_NAMES,"df":df.assign(default=y),"categorical_features":CATEGORICAL_FEATURES,"numerical_features":NUMERICAL_FEATURES,"n_samples":n,"n_features":len(FEATURE_NAMES),"positive_rate":y.mean()}
+    util = df["utilization_rate"]; age = np.clip(df["age_months"] / 360, 0, 1)
+    delinq = np.clip(df["delinquency_days"] / 180, 0, 1); trades = np.clip(df["num_trades"] / 40, 0, 1)
+    pay = df["payment_ratio"]; bal = np.clip(df["revolving_balance"] / 100000, 0, 1)
+    inq = np.clip(df["inquiries_6m"] / 10, 0, 1)
+    log_odds = -1 + 3*util + 1.5*delinq - 0.8*age + 0.3*trades - 1.5*pay + 0.4*bal + 0.6*inq + rng.normal(0, 0.5, n)
+    prob = 1/(1+np.exp(-log_odds)); y = (prob > np.percentile(prob, 70)).astype(float)
+    return {"X": df, "y": y, "n_samples": n, "n_features": len(df.columns), "positive_rate": y.mean(),
+            "categorical_features": [], "numerical_features": list(df.columns)}
