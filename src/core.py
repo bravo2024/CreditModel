@@ -52,3 +52,12 @@ def lorenz_curve(y_true, y_proba):
     """Gini = 2*AUC - 1 for credit risk discrimination."""
     from sklearn.metrics import roc_auc_score
     return float(2 * roc_auc_score(y_true, y_proba) - 1)
+
+def population_stability_index(expected, actual, n_bins=10):
+    """PSI between a development-time score distribution and a current one."""
+    bins = np.linspace(0, 1, n_bins + 1)
+    e, _ = np.histogram(expected, bins=bins)
+    a, _ = np.histogram(actual, bins=bins)
+    e = np.clip(e / max(e.sum(), 1), 1e-6, None)
+    a = np.clip(a / max(a.sum(), 1), 1e-6, None)
+    return float(np.sum((a - e) * np.log(a / e)))
